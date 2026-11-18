@@ -18,19 +18,25 @@ jobs:
       - name: Build Tauri .EXE + Installer
         shell: pwsh
         run: |
-          Write-Host "=== TOP LEVEL ==="
-          Get-ChildItem -Name
-          Write-Host "=== FINDING Cargo.toml ==="
-          $found = Get-ChildItem -Recurse -Filter "Cargo.toml" -ErrorAction SilentlyContinue | Where-Object { $_.FullName -like "*src-tauri*" } | Select-Object -First 1
-          if (-not $found) {
-            Write-Host "=== FULL LIST (first 200) ==="
-            Get-ChildItem -Recurse -Name | Select-Object -First 200
-            Write-Error "Could not find src-tauri/Cargo.toml anywhere in repo"
-            exit 1
-          }
+          Write-Host "=== ALL tauri.conf.json FILES IN REPO ==="
+          Get-ChildItem -Recurse -Filter "tauri.conf.json" | ForEach-Object { Write-Host $_.FullName }
+          Write-Host "=== ALL Cargo.toml IN src-tauri ==="
+          Get-ChildItem -Recurse -Filter "Cargo.toml" | Where-Object { $_.FullName -like "*src-tauri*" } | ForEach-Object { Write-Host $_.FullName }
+          $found = Get-ChildItem -Recurse -Filter "Cargo.toml" | Where-Object { $_.FullName -like "*src-tauri*" } | Select-Object -First 1
+          if (-not $found) { Write-Error "Could not find src-tauri/Cargo.toml anywhere in repo"; exit 1 }
           $dir = Split-Path $found.FullName -Parent
-          Write-Host "Found Tauri project in: $dir"
+          Write-Host "Using Tauri project in: $dir"
           Set-Location $dir
+          Write-Host "=== BEFORE FIX ==="
+          Get-Content tauri.conf.json
+          # AUTO-FIX: remove illegal icon from app.windows[*], force nsis only
+          $json = Get-Content tauri.conf.json -Raw | ConvertFrom-Json
+          foreach ($w in $json.app.windows) { if ($w.PSObject.Properties.Name -contains 'icon') { $w.PSObject.Properties.Remove('icon') } }
+          if (-not ($json.app.PSObject.Properties.Name -contains 'icon')) { $json.app | Add-Member -NotePropertyName icon -NotePropertyValue @("icons/icon.ico") }
+          $json.bundle.targets = @("nsis")
+          $json | ConvertTo-Json -Depth 10 | Set-Content tauri.conf.json -Encoding UTF8
+          Write-Host "=== AFTER AUTO-FIX ==="
+          Get-Content tauri.conf.json
           cargo tauri build
       - name: Upload .EXE + Setup EXE only - NO MSI
         uses: actions/upload-artifact@v4
