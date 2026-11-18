@@ -18,23 +18,34 @@ jobs:
       - name: Build Tauri .EXE + Installer
         shell: pwsh
         run: |
+          Write-Host "=== REPO TOP LEVEL ==="
+          Get-ChildItem -Name
+          Write-Host "=== ALL index.html FILES ==="
+          Get-ChildItem -Recurse -Filter "index.html" | ForEach-Object { Write-Host $_.FullName }
           $found = Get-ChildItem -Recurse -Filter "Cargo.toml" | Where-Object { $_.FullName -like "*src-tauri*" } | Select-Object -First 1
           if (-not $found) { Write-Error "Could not find src-tauri/Cargo.toml anywhere in repo"; exit 1 }
           $dir = Split-Path $found.FullName -Parent
           Write-Host "Using Tauri project in: $dir"
           Set-Location $dir
-          Write-Host "=== BEFORE FIX ==="
-          Get-Content tauri.conf.json
-          # AUTO-FIX for Tauri v2: icon is ONLY allowed in bundle.icon
-          # Remove it from app.windows[*] AND from app itself
+          # AUTO-FIX tauri.conf.json for Tauri v2
           $json = Get-Content tauri.conf.json -Raw | ConvertFrom-Json
           foreach ($w in $json.app.windows) { if ($w.PSObject.Properties.Name -contains 'icon') { $w.PSObject.Properties.Remove('icon') } }
           if ($json.app.PSObject.Properties.Name -contains 'icon') { $json.app.PSObject.Properties.Remove('icon') }
-          # Make sure bundle.icon exists
           if (-not ($json.bundle.PSObject.Properties.Name -contains 'icon')) { $json.bundle | Add-Member -NotePropertyName icon -NotePropertyValue @("icons/icon.ico") }
           $json.bundle.targets = @("nsis")
+          # AUTO-FIX frontendDist: find the real src folder with index.html
+          $index = Get-ChildItem -Path $env:GITHUB_WORKSPACE -Recurse -Filter "index.html" | Where-Object { $_.FullName -like "*src*" } | Select-Object -First 1
+          if ($index) {
+            $srcDir = Split-Path $index.FullName -Parent
+            Write-Host "Found web assets in: $srcDir"
+            $rel = [System.IO.Path]::GetRelativePath($dir, $srcDir)
+            Write-Host "Setting frontendDist to: $rel"
+            $json.build.frontendDist = $rel
+          } else {
+            Write-Host "WARNING: No index.html found, keeping frontendDist as-is"
+          }
           $json | ConvertTo-Json -Depth 10 | Set-Content tauri.conf.json -Encoding UTF8
-          Write-Host "=== AFTER AUTO-FIX ==="
+          Write-Host "=== FIXED tauri.conf.json ==="
           Get-Content tauri.conf.json
           cargo tauri build
       - name: Upload .EXE + Setup EXE only - NO MSI
