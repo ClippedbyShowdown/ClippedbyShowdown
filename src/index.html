@@ -147,7 +147,35 @@ function playMontage(){if(!clips.length){alert('Upload a clip first.');return;} 
 function clearMontage(){montage=[]; renderMontage(); log('Montage cleared.');}
 function deployClip(){const title=(document.getElementById('deployTitle').value||'My Clip').trim().replace(/[^\w\- ]+/g,'').trim()||'My Clip'; const fname=title+'_ClippedbyShowdown_edited.mp4'; document.getElementById('exportName').textContent=fname; const v=document.getElementById('player'); const keep=document.getElementById('keepOriginal').checked; if(!clips.length){document.getElementById('deployLog').textContent='No clip to Deploy. Upload a clip first.'; alert('Upload a clip first.'); return;} // Export: download the source file with the new exported name (browser / Tauri Downloads). In Tauri+FFmpeg build this is replaced by real FFmpeg trim+export.
   const srcClip=clips[0]; const a=document.createElement('a'); a.href=srcClip.url||''; a.download=fname; document.body.appendChild(a); a.click(); a.remove(); document.getElementById('deployLog').textContent='Deployed: '+fname+' → Downloads. Exported copy NOT saved back.'; log('Deployed: '+fname+' to Downloads.'); if(!keep){clips=[]; renderLibrary(); log('Original removed after Deploy (Keep unticked).');} else {log('Original kept after Deploy (Keep ticked).');} alert('Deployed: '+fname+'\nCheck your Downloads folder.');}
-function checkUpdates(){document.getElementById('updateLog').textContent='Checked: Up to date (v1.0.0). Signed updates only.'; log('Checked for updates.');}
+const CURRENT_VERSION='1.0.0';
+async function checkUpdates(){
+  const logEl=document.getElementById('updateLog');
+  logEl.textContent='Checking for updates...';
+  try{
+    const UPDATE_URL='https://clippedbyshowdown.com/version.json';
+    const res=await fetch(UPDATE_URL,{cache:'no-store'});
+    if(!res.ok) throw new Error('no version file');
+    const data=await res.json();
+    if(data.latestVersion && data.latestVersion!==CURRENT_VERSION){
+      logEl.textContent='NEW VERSION '+data.latestVersion+' available! '+(data.releaseNotes||'')+' Click Go Download below.';
+      showUpdateBanner(data);
+      log('Update available: '+data.latestVersion);
+    } else {
+      logEl.textContent='Up to date (v'+CURRENT_VERSION+'). Signed updates only.';
+      hideUpdateBanner();
+    }
+  }catch(e){
+    logEl.textContent='Could not reach update server (offline?). You are on v'+CURRENT_VERSION+'. Try again later.';
+  }
+}
+function showUpdateBanner(data){
+  let b=document.getElementById('updateBanner');
+  if(!b){ b=document.createElement('div'); b.id='updateBanner'; b.style.cssText='background:#22c55e;color:#000;font-weight:900;text-align:center;padding:12px;margin:10px 12px 0;border-radius:12px'; document.body.insertBefore(b, document.body.children[1]); }
+  const dl = data.downloadUrl && data.downloadUrl.startsWith('http') ? data.downloadUrl : ('https://clippedbyshowdown.com/' + (data.downloadUrl||'ClippedbyShowdown-Windows-Setup.zip'));
+  b.innerHTML='NEW VERSION '+data.latestVersion+' AVAILABLE - <a href="'+dl+'" style="color:#000;text-decoration:underline">GO DOWNLOAD THE NEW VERSION</a> - '+(data.releaseNotes||'');
+  b.classList.remove('hidden');
+}
+function hideUpdateBanner(){ const b=document.getElementById('updateBanner'); if(b) b.classList.add('hidden'); }
 function runIntegrity(){alert('Integrity Check: All buttons / Admin / AI Director / Deploy paths OK.'); log('Integrity Check passed.');}
 // ADMIN
 const adminTabsList=['Dashboard','Users','Clips Moderation','Content/Editor Controls','Live Updates','Announcements','Reports/Appeals','Settings/Permissions','Audit Log','Backup/Restore','SHOWDOWN AI','Security Centre'];
@@ -157,5 +185,5 @@ function renderAdminContent(tab){const c=document.getElementById('adminContent')
 function publishLive(){const t=document.getElementById('liveText').value; if(!t) return; liveList.push(t); document.getElementById('liveUpdates').innerHTML=liveList.map(x=>`<p style="font-size:13px">• ${x}</p>`).join(''); log('Live Update published: '+t); alert('Live Update published.');}
 function publishAnn(){const t=document.getElementById('annText').value; if(!t) return; announcementsList.push(t); document.getElementById('announcements').innerHTML=announcementsList.map(x=>`<p style="font-size:13px">• ${x}</p>`).join(''); log('Announcement published: '+t); alert('Announcement published.');}
 function runShowdownAI(){const v=document.getElementById('showdownAiInput').value||''; document.getElementById('showdownAiOut').textContent='SHOWDOWN AI suggestion for: "'+v+'"\n\nSuggested change: Adjust layout / colours / button placement using editor settings. This suggestion does NOT rebuild the .exe by itself.\n\nTo apply it for real: copy this suggestion to the developer, get the updated file, rebuild via GitHub Actions, publish new Release.\n\nPublish only after Showdown confirmation.'; log('SHOWDOWN AI suggestion for: '+v);}
-updateTrim(); renderLibrary();
+updateTrim(); renderLibrary(); setTimeout(checkUpdates, 1500);
 </script></body></html>
