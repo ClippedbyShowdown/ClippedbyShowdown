@@ -18,10 +18,18 @@ jobs:
       - name: Build Tauri .EXE + Installer
         shell: pwsh
         run: |
-          if (Test-Path "src-tauri/Cargo.toml") { $dir = "src-tauri" }
-          elseif (Test-Path "ClippedbyShowdown-EXE-Project/src-tauri/Cargo.toml") { $dir = "ClippedbyShowdown-EXE-Project/src-tauri" }
-          else { Get-ChildItem -Recurse -Name | Select-Object -First 100; Write-Error "Could not find src-tauri/Cargo.toml"; exit 1 }
-          Write-Host "Building in $dir"
+          Write-Host "=== TOP LEVEL ==="
+          Get-ChildItem -Name
+          Write-Host "=== FINDING Cargo.toml ==="
+          $found = Get-ChildItem -Recurse -Filter "Cargo.toml" -ErrorAction SilentlyContinue | Where-Object { $_.FullName -like "*src-tauri*" } | Select-Object -First 1
+          if (-not $found) {
+            Write-Host "=== FULL LIST (first 200) ==="
+            Get-ChildItem -Recurse -Name | Select-Object -First 200
+            Write-Error "Could not find src-tauri/Cargo.toml anywhere in repo"
+            exit 1
+          }
+          $dir = Split-Path $found.FullName -Parent
+          Write-Host "Found Tauri project in: $dir"
           Set-Location $dir
           cargo tauri build
       - name: Upload .EXE + Setup EXE only - NO MSI
