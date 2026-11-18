@@ -1,0 +1,5 @@
+After BUILD-EXE.bat finishes, check:
+1. src-tauri/target/release/ClippedbyShowdown.exe exists
+2. Double-click it - window opens, icon shows in taskbar
+3. Upload a clip > Trim > Deploy - file lands in Downloads
+If any step fails, copy the error from the BUILD window.

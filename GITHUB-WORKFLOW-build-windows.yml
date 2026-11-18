@@ -1,0 +1,28 @@
+name: Build Windows .EXE
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --version "^2" --locked
+      - name: Build Tauri .EXE + Installer
+        working-directory: src-tauri
+        run: cargo tauri build
+      - name: Upload .EXE + Setup EXE only - NO MSI
+        uses: actions/upload-artifact@v4
+        with:
+          name: ClippedbyShowdown-Windows
+          path: |
+            src-tauri/target/release/*.exe
+            src-tauri/target/release/bundle/nsis/*-setup.exe
+          if-no-files-found: error
