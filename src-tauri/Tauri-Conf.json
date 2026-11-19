@@ -1,0 +1,50 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "ClippedbyShowdown",
+  "version": "1.0.0",
+  "identifier": "com.clippedbyshowdown.app",
+  "build": {
+    "frontendDist": "../src",
+    "devUrl": "http://localhost:1420",
+    "beforeDevCommand": "",
+    "beforeBuildCommand": ""
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "ClippedbyShowdown - CLIP IT. PROVE IT. POST IT.",
+        "width": 1280,
+        "height": 800,
+        "minWidth": 900,
+        "minHeight": 600,
+        "resizable": true,
+        "fullscreen": false,
+        "center": true
+      }
+    ],
+    "security": {
+      "csp": null
+    },
+    "icon": [
+      "icons/icon.ico"
+    ]
+  },
+  "bundle": {
+    "active": true,
+    "targets": [
+      "nsis"
+    ],
+    "icon": [
+      "icons/icon.ico"
+    ],
+    "category": "Game",
+    "copyright": "ClippedbyShowdown",
+    "shortDescription": "CLIP IT. PROVE IT. POST IT.",
+    "longDescription": "Clip-only editor. Local only. Your clips stay on your PC.",
+    "windows": {
+      "certificateThumbprint": null,
+      "digestAlgorithm": "sha256",
+      "timestampUrl": ""
+    }
+  }
+}
