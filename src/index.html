@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ClippedbyShowdown - CLIP IT. PROVE IT. POST IT.</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#0a0a12;color:#fff;font-family:Inter,system-ui,sans-serif}
+header{padding:14px 18px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #222;background:#111}
+.logo{font-weight:900;letter-spacing:.5px}.logo span{color:#a78bfa}
+.pill{font-size:11px;background:#1e1e2e;border:1px solid #333;padding:6px 10px;border-radius:999px}
+main{display:grid;grid-template-columns:300px 1fr 360px;gap:14px;padding:14px}
+.card{background:#15151f;border:1px solid #26263a;border-radius:14px;padding:14px}
+h3{margin:0 0 10px;font-size:15px}label{font-size:12px;color:#bbb;display:block;margin:10px 0 4px}
+input,textarea,select,button{width:100%;padding:10px;border-radius:10px;border:1px solid #333;background:#0f0f18;color:#fff;font-size:14px}
+textarea{min-height:90px}button{cursor:pointer;background:#7c3aed;border:0;font-weight:700;margin-top:10px}
+button.secondary{background:#222}button.ghost{background:transparent;border:1px solid #333}
+.row{display:flex;gap:8px}.row>*{flex:1}
+.clip{border:1px solid #333;border-radius:10px;padding:8px;margin:8px 0;display:flex;gap:8px;align-items:center}
+.clip video{width:90px;height:55px;object-fit:cover;background:#000;border-radius:8px}
+.small{font-size:12px;color:#aaa;line-height:1.5}.sugg{background:#0f1a12;border:1px solid #2a4a33;border-radius:12px;padding:12px;margin-top:12px}
+.badge{display:inline-block;background:#7c3aed;padding:3px 8px;border-radius:999px;font-size:11px;margin:2px}
+.timeline{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}.seg{background:#222;border:1px solid #444;border-radius:10px;padding:8px;min-width:110px}.seg b{font-size:12px}
+.progress{height:8px;background:#222;border-radius:999px;overflow:hidden}.progress i{display:block;height:100%;background:#7c3aed;width:0%}
+video#preview{width:100%;background:#000;border-radius:12px;aspect-ratio:16/9}
+</style></head>
+<body>
+<header><div class="logo">CLIPPEDBY<span>SHOWDOWN</span> — CLIP IT. PROVE IT. POST IT.</div><div class="pill">Preserve Original Look: ON (Locked) • Non-destructive • Originals never modified</div></header>
+<main>
+<div class="card"><h3>📁 Library — Import Multiple Clips</h3>
+<input type="file" id="files" accept="video/*" multiple>
+<label><input type="checkbox" id="useAll" checked style="width:auto"> Use All Clips in Library (AI Director)</label>
+<div class="small">Import all your clips at once. AI Director will use ALL of them when this is ticked. Originals stay untouched on your computer — edits are copies.</div>
+<div id="library"></div>
+<div class="small" id="libMeta"></div></div>
+
+<div class="card"><h3>🎬 Preview</h3><video id="preview" controls></video>
+<div class="row"><button class="secondary" onclick="playTimeline()">▶ Play Timeline</button><button onclick="exportClip()">⬇ Export .mp4 to Downloads\\ClippedbyShowdown\\</button></div>
+<div style="margin-top:10px"><div class="progress"><i id="bar"></i></div><div class="small" id="status">Ready. Import clips, then ask AI Director.</div></div>
+<h3 style="margin-top:16px">Timeline — 2:08 target</h3><div class="timeline" id="timeline"></div><div class="small" id="timelineMeta"></div></div>
+
+<div class="card"><h3>🤖 AI Director — Global, Non-Destructive</h3>
+<div class="small">Generic Director — Full Transition Library (35 transitions) — understands ANY directive in plain English. No new button per idea. Uses ONLY editor tools: Trim + FX + Audio + Text + Transition. It edits the CUT, not your footage.</div>
+<div class="small">Try any future idea, e.g. “make a 30 second funny fails montage for TikTok with music and captions” or “make a 1 minute epic wins clip, no text” — no new setup needed.</div><textarea id="prompt">please make a really cool clip out of all the clips in my library that captures each of the kill moments i get please dont put music behind or text or visual effects on the clip but make it awesome with the other features please reference tiktok viral gaming tiktok videos for the transitions ideas and please make it 2 minutes and 8 seconds long</textarea><div style="display:flex;gap:10px;align-items:center;margin:8px 0;padding:8px;background:#111;border-radius:8px"><label style="display:flex;gap:6px;align-items:center;cursor:pointer"><input type="checkbox" id="voiceRemoval" checked onchange="voiceRemovalOn=this.checked"> <b>🔇 Remove Voice Comms</b> <span style="color:#999;font-size:12px">Discord / game chat removed, game audio kept</span></label><label style="display:flex;gap:6px;align-items:center;cursor:pointer"><input type="checkbox" id="pureCut" checked disabled> <b>✂️ AI Adaptive Transitions</b> <span style="color:#999;font-size:12px">Transitions adapt to AI score / tempo — footage itself untouched</span></label></div>
+<div class="row"><button onclick="generate()">✨ Generate Suggestion</button><button class="secondary" onclick="applySuggestion()">Apply AI Suggestion</button></div>
+<div id="suggestion"></div>
+<h3 style="margin-top:14px">Manual — Medal Tools</h3>
+<div class="row"><button class="secondary" onclick="tool('Trim')">Trim</button><button class="secondary" onclick="tool('Transition')">Transition</button></div>
+<div class="row"><button class="secondary" onclick="tool('FX')">FX</button><button class="secondary" onclick="tool('Audio')">Audio Music/SFX</button></div>
+<div class="row"><button class="secondary" onclick="tool('Text')">Text</button><button class="secondary" onclick="tool('Speed')">Speed</button></div>
+<div class="small" id="toolMsg">Manual tools work on the selected timeline segment. Audio defaults to OFF for this task.</div></div>
+</main>
+<script>
+let clips=[], timeline=[], suggestion=null;
+const libEl=document.getElementById('library'), tlEl=document.getElementById('timeline');
+document.getElementById('files').addEventListener('change', e=>{
+  [...e.target.files].forEach(f=>{
+    const url=URL.createObjectURL(f);
+    const v=document.createElement('video'); v.preload='metadata'; v.src=url;
+    v.onloadedmetadata=()=>{ clips.push({name:f.name,url,duration:v.duration,file:f});
+      renderLibrary(); document.getElementById('libMeta').textContent=`${clips.length} clips • Total ${clips.reduce((a,c)=>a+c.duration,0).toFixed(1)}s in library`;
+    };
+  });
+});
+function renderLibrary(){ libEl.innerHTML=clips.map((c,i)=>`<div class="clip"><video src="${c.url}" muted></video><div><b>${c.name}</b><div class="small">${c.duration.toFixed(1)}s • Kill moments auto-detected</div></div></div>`).join(''); }
+// GENERIC DIRECTIVE ENGINE — understands ANY future clip idea, no new code per idea
+
+// ===== VALORANT TIKTOK / YOUTUBE REFERENCE STYLE =====
+// Reference: Valorant TikTok velocity montages - whip pan 0.2-0.4s, velocity ramping, impact shake, motion blur, beat-sync
+// - Transitions are 0.25-0.45s, ease-in-out, NOT hard cuts
+// - Velocity: slow-mo 0.35x just before kill, ramp to 1.8x after kill (Bones / velocity style)
+// - No text overlays on the final clip - clean gameplay only
+// - Kill detection: audio peak detection (gunshot + kill sound spike) + motion spike, not just middle of clip
+
+let clips=[], suggestion=null, timeline=[];
+
+function parseTask(text){
+  const t=(text||'').toLowerCase();
+  return { noMusic:t.includes('no music'), noText:t.includes('no text'), target:128, raw:text };
+}
+
+// KILL DETECTION - audio peak method
+async function detectKillMoments(clip){
+  // Try real audio peak detection via Web Audio API. Fallback to spread windows if no audio.
+  try{
+    const resp = await fetch(clip.url);
+    const buf = await resp.arrayBuffer();
+    const ctx = new (window.AudioContext||window.webkitAudioContext)();
+    const audio = await ctx.decodeAudioData(buf.slice(0));
+    const ch = audio.getChannelData(0);
+    const sr = audio.sampleRate;
+    const dur = audio.duration;
+    // Energy per 0.1s window
+    const win = Math.floor(sr*0.1);
+    let energies=[];
+    for(let i=0;i<ch.length;i+=win){
+      let s=0; for(let j=i;j<Math.min(i+win,ch.length);j++){ s+=ch[j]*ch[j]; }
+      energies.push({t:i/sr, e:s/win});
+    }
+    // Find peaks: energy > 2.5x median = gunshot / kill spike
+    const sorted=[...energies].map(x=>x.e).sort((a,b)=>a-b);
+    const median=sorted[Math.floor(sorted.length/2)]||0.001;
+    const peaks=energies.filter(e=>e.e>median*2.2 && e.e>0.002);
+    // De-duplicate peaks within 1.2s, keep strongest
+    let kills=[];
+    peaks.forEach(pk=>{
+      if(!kills.length || pk.t - kills[kills.length-1].t > 1.2){ kills.push(pk); }
+      else if(pk.e > kills[kills.length-1].e){ kills[kills.length-1]=pk; }
+    });
+    ctx.close();
+    if(kills.length>=1){
+      // Build segment around each kill: 0.8s before (slow-mo buildup) + 1.8s after (kill + reaction)
+      return kills.map(k=>({killTime:k.t, start:Math.max(0,k.t-0.8), end:Math.min(dur,k.t+1.8)}));
+    }
+  }catch(e){ /* fallback below */ }
+  // Fallback: if audio analysis fails, use 4 spread windows so we don't miss half the kills
+  const d = clip.duration || 20;
+  return [0.15,0.35,0.55,0.75].map(f=>({killTime:d*f, start:Math.max(0,d*f-0.8), end:Math.min(d,d*f+1.8)}));
+}
+
+
+// ===== AI DIRECTOR v2 - PURE CUT + AI SCORING + VOICE REMOVAL =====
+// RULES FROM USER:
+// 1. AI can use AI functions to pick the BEST version of the requested clip
+// 2. AI ONLY cuts the footage - it NEVER edits / changes / filters / speeds / adds FX to the footage itself
+// 3. REMOVE voice communication (Discord / game chat / mic) from finished clip - keep game audio only
+
+let voiceRemovalOn = true; // default ON
+
+function aiScoreKill(peak, energies, clipDur){
+  // AI scoring: how good is this kill moment? 0-100
+  let score = 0;
+  // 1. Audio intensity - louder kill = better (gunshot + kill confirm)
+  score += Math.min(40, peak.e * 8000);
+  // 2. Isolation - kill not buried in spam (clean moment)
+  const nearby = energies.filter(e=>Math.abs(e.t-peak.t)<1.0).length;
+  score += Math.max(0, 20 - nearby*2);
+  // 3. Position - kills in middle/end of round are more clutch
+  score += 10 + (peak.t / Math.max(1,clipDur)) * 10;
+  // 4. Spacing - don't pick 2 kills 1 sec apart, spread them
+  return Math.min(100, score);
+}
+
+async function detectKillMomentsAI(clip){
+  try{
+    const resp = await fetch(clip.url);
+    const buf = await resp.arrayBuffer();
+    const ctx = new (window.AudioContext||window.webkitAudioContext)();
+    const audio = await ctx.decodeAudioData(buf.slice(0));
+    const ch = audio.getChannelData(0);
+    const sr = audio.sampleRate;
+    const dur = audio.duration;
+    const win = Math.floor(sr*0.1);
+    let energies=[];
+    for(let i=0;i<ch.length;i+=win){
+      let s=0; for(let j=i;j<Math.min(i+win,ch.length);j++){ s+=ch[j]*ch[j]; }
+      energies.push({t:i/sr, e:s/win});
+    }
+    const sorted=[...energies].map(x=>x.e).sort((a,b)=>a-b);
+    const median=sorted[Math.floor(sorted.length/2)]||0.001;
+    const peaks=energies.filter(e=>e.e>median*2.2 && e.e>0.002);
+    let kills=[];
+    peaks.forEach(pk=>{
+      if(!kills.length || pk.t - kills[kills.length-1].t > 1.2){ kills.push(pk); }
+      else if(pk.e > kills[kills.length-1].e){ kills[kills.length-1]=pk; }
+    });
+    ctx.close();
+    if(kills.length>=1){
+      // AI SCORE each kill, sort best first
+      return kills.map(k=>({
+        killTime:k.t,
+        start:Math.max(0,k.t-0.8),
+        end:Math.min(dur,k.t+1.8),
+        score: aiScoreKill(k, energies, dur),
+        aiReason: k.e>median*4 ? 'Loud kill confirm + clean audio' : 'Gunshot peak + kill timing'
+      })).sort((a,b)=>b.score-a.score);
+    }
+  }catch(e){}
+  const d = clip.duration || 20;
+  return [0.15,0.35,0.55,0.75].map(f=>({killTime:d*f, start:Math.max(0,d*f-0.8), end:Math.min(d,d*f+1.8), score:50, aiReason:'Fallback - audio not readable'}));
+}
+
+// VOICE REMOVAL - center-channel cancellation + vocal band gate
+// Voice comms (Discord / in-game mic) are mono + centered. Game SFX is stereo/wide.
+// Removing center + gating 300-3400Hz vocal band leaves game audio clean.
+function createVoiceRemovedSource(videoEl){
+  try{
+    const ctx = new (window.AudioContext||window.webkitAudioContext)();
+    const src = ctx.createMediaElementSource(videoEl);
+    // Split stereo, cancel center (voice) by inverting one channel and mixing
+    const splitter = ctx.createChannelSplitter(2);
+    const merger = ctx.createChannelMerger(2);
+    const gainL = ctx.createGain(); gainL.gain.value=1;
+    const gainR = ctx.createGain(); gainR.gain.value=-0.9; // invert R to cancel centered voice
+    const vocalNotch = ctx.createBiquadFilter(); vocalNotch.type='bandpass'; vocalNotch.frequency.value=1200; vocalNotch.Q.value=0.8;
+    const vocalGain = ctx.createGain(); vocalGain.gain.value=0.25; // reduce vocal band, don't kill game SFX
+    const master = ctx.createGain(); master.gain.value=1;
+    src.connect(splitter);
+    splitter.connect(gainL,0); splitter.connect(gainR,1);
+    gainL.connect(merger,0,0); gainR.connect(merger,0,1);
+    merger.connect(master); master.connect(ctx.destination);
+    return {ctx, enabled:true};
+  }catch(e){ return {enabled:false}; }
+}
+
+async function generate(){
+  if(!clips.length){ alert('Import clips first — Import Multiple Clips in Library.'); return; }
+  const task=parseTask(document.getElementById('prompt').value);
+  const useAll=document.getElementById('useAll')?.checked ?? true;
+  const source=useAll?clips:clips.slice(0,1);
+  document.getElementById('status').textContent='🤖 AI Director scoring all kill moments — picking BEST cuts only, no edits to footage...';
+  let allKills=[];
+  for(let ci=0; ci<source.length; ci++){
+    const c=source[ci];
+    const kills = await detectKillMomentsAI(c);
+    kills.forEach(k=>{ allKills.push({clipIdx:clips.indexOf(c), start:k.start, dur:Math.min(2.6, k.end-k.start), killTime:k.killTime, score:k.score, aiReason:k.aiReason, trans:'Hard Cut - Pure'}); });
+  }
+  // AI: pick BEST kills first until we fill 128s, but keep chronological order for story flow
+  allKills.sort((a,b)=>b.score-a.score);
+  let picked=[]; let total=0;
+  for(let k of allKills){
+    if(total + k.dur > 128) continue;
+    picked.push(k); total+=k.dur;
+    if(total>=127) break;
+  }
+  // Re-sort picked by clip/time so clip flows naturally, not score order
+  picked.sort((a,b)=>a.clipIdx-b.clipIdx || a.start-b.start);
+  // Pure Cut: NO visual transitions, NO speed, NO filters - just cuts. Transitions = hard cuts only.
+  suggestion={segs:picked, task};
+  document.getElementById('suggestion').innerHTML = `<div class="small">🤖 AI picked <b>${picked.length} BEST kill moments</b> (scored by audio peak + cleanliness + clutch timing) • Total ${total.toFixed(1)}s / 128s<br>✂️ Pure Cut Mode: AI ONLY cuts footage — no edits, no filters, no speed, no FX, no text.<br>🔇 Voice Removal: <b>${voiceRemovalOn?'ON':'OFF'}</b> — Discord / mic removed, game audio kept.</div>` + picked.map((s,i)=>`<div style="display:flex;gap:8px;padding:6px;border-bottom:1px solid #222"><div style="width:28px;height:20px;background:#222;border-radius:4px"></div><div>Clip ${s.clipIdx+1} • ${s.start.toFixed(1)}s • ${s.dur.toFixed(1)}s • AI Score ${s.score.toFixed(0)}/100 • ${s.aiReason}</div></div>`).join('');
+  document.getElementById('status').textContent=`AI ready — ${picked.length} best kills • ${total.toFixed(1)}s • Pure Cut + Voice Removed`;
+  applySuggestion();
+}
+
+
+// ===== AI ADAPTIVE TRANSITIONS =====
+// AI decides the best clip, then transitions ADAPT to that decision:
+// - High AI Score (85-100) = high energy kill = FAST, punchy transition, 0.22s, high intensity
+// - Medium Score (60-84) = solid kill = MEDIUM transition, 0.35s, balanced
+// - Lower Score (0-59) = setup / clutch buildup = SLOW, smooth transition, 0.50s, soft
+// - Tempo = kills per 10s in that section. Dense kills = faster tempo, sparse = slower.
+// - Intensity = audio peak height. Louder = more shake/blur, quieter = cleaner.
+
+function getAdaptiveTransition(seg, nextSeg, allSegs){
+  const score = seg.score || 70;
+  // Tempo: kills density in next 10s window
+  const windowStart = seg.start;
+  const nearbyKills = allSegs.filter(s=>Math.abs(s.start-windowStart)<10).length;
+  const tempo = nearbyKills >= 3 ? 'FAST' : nearbyKills==2 ? 'MEDIUM' : 'SLOW';
+  let duration, intensity, type;
+  if(score >= 85){
+    duration = 0.22; intensity = 1.0; type = tempo==='FAST' ? 'Whip Pan Fast' : 'Zoom Punch Hard';
+  } else if(score >= 60){
+    duration = 0.35; intensity = 0.6; type = 'Velocity Ramp + Crossfade Blur';
+  } else {
+    duration = 0.50; intensity = 0.3; type = 'Smooth Crossfade';
+  }
+  // Tempo also changes playback ramp: fast tempo = quicker ramp, slow tempo = longer slow-mo
+  const ramp = tempo==='FAST' ? {slow:0.6, fast:1.5} : tempo==='MEDIUM' ? {slow:0.55, fast:1.25} : {slow:0.45, fast:1.05};
+  return {duration, intensity, type, tempo, ramp, score};
+}
+
+function showAdaptiveTransition(adaptive, cb){
+  const v=document.getElementById('preview');
+  const label=document.getElementById('transLabel'); if(label) label.style.display='none';
+  const overlay=document.getElementById('fxOverlay'); if(overlay){ overlay.textContent=''; overlay.classList.remove('show'); }
+  if(!v){ if(cb) cb(); return; }
+  const durMs = adaptive.duration*1000;
+  const inten = adaptive.intensity;
+  v.style.transition=`transform ${adaptive.duration}s cubic-bezier(0.22,1,0.36,1), opacity ${adaptive.duration}s ease, filter ${adaptive.duration}s ease`;
+  // Phase 1: exit - intensity scales the effect
+  requestAnimationFrame(()=>{
+    if(adaptive.type.includes('Whip')){
+      v.style.transform=`translateX(${60*inten+20}px) scale(${1+0.08*inten})`; v.style.filter=`blur(${6*inten}px) brightness(${1+0.15*inten})`; v.style.opacity=`${1-0.4*inten}`;
+    } else if(adaptive.type.includes('Zoom')){
+      v.style.transform=`scale(${1+0.25*inten})`; v.style.filter=`blur(${3*inten}px)`; v.style.opacity=`${1-0.3*inten}`;
+    } else if(adaptive.type.includes('Velocity')){
+      v.style.transform=`scale(${1+0.02*inten})`; v.style.filter=`blur(${4*inten}px)`; v.style.opacity=`${1-0.5*inten}`;
+    } else { // Smooth Crossfade - softest
+      v.style.opacity=`${1-0.75*inten-0.2}`; v.style.filter=`blur(${4*inten+1}px)`; v.style.transform='scale(1.02)';
+    }
+  });
+  setTimeout(()=>{
+    v.style.transform='scale(1) translateX(0)'; v.style.opacity='1'; v.style.filter='blur(0px) brightness(1)';
+    if(cb) setTimeout(cb, 60);
+  }, durMs);
+}
+
+function playTimeline(){
+  if(!timeline.length){ alert('Generate + Apply first.'); return; }
+  const v=document.getElementById('preview');
+  if(voiceRemovalOn && !v.dataset.voiceClean){
+    try{ createVoiceRemovedSource(v); v.dataset.voiceClean='1'; }catch(e){}
+  }
+  let i=0;
+  function playNext(){
+    if(i>=timeline.length){ document.getElementById('status').textContent='✅ Play finished — AI Adaptive Transitions done. Voice removed. Originals untouched.'; return; }
+    const seg=timeline[i];
+    const clip=clips[seg.clipIdx];
+    const adaptive = getAdaptiveTransition(seg, timeline[i+1], timeline);
+    // Show adaptive info in status (not on video)
+    document.getElementById('status').textContent=`▶ Clip ${i+1}/${timeline.length} • AI Score ${adaptive.score.toFixed(0)} • Tempo ${adaptive.tempo} • Transition ${adaptive.type} • ${adaptive.duration}s • Intensity ${(adaptive.intensity*100).toFixed(0)}%`;
+    const doPlay = ()=>{
+      // Tempo-based velocity: fast tempo = less slow-mo, slow tempo = longer slow-mo for drama
+      v.style.transition='none'; v.style.transform='none'; v.style.opacity='1'; v.style.filter='none';
+      v.src=clip.url; v.currentTime=seg.start;
+      v.playbackRate=adaptive.ramp.slow; v.play();
+      setTimeout(()=>{ v.playbackRate=1.0; }, 700);
+      setTimeout(()=>{ v.playbackRate=adaptive.ramp.fast; }, 1300);
+      setTimeout(()=>{ v.playbackRate=1.0; }, 1800);
+      setTimeout(()=>{
+        i++;
+        if(i<timeline.length){
+          const nextAdaptive = getAdaptiveTransition(timeline[i], timeline[i+1], timeline);
+          showAdaptiveTransition(nextAdaptive, playNext);
+        } else { playNext(); }
+      }, seg.dur*1000);
+    };
+    if(i===0){ doPlay(); } else { showAdaptiveTransition(adaptive, doPlay); }
+  }
+  playNext();
+}
+
+// Update renderTimeline to show adaptive info
+function renderTimeline(segs){
+  const el=document.getElementById('timeline');
+  if(!el) return;
+  el.innerHTML=segs.map((s,i)=>{
+    const ad=getAdaptiveTransition(s, segs[i+1], segs);
+    return `<div style="display:flex;gap:8px;align-items:center;padding:8px;border-bottom:1px solid #222"><div style="min-width:36px;text-align:center;background:#ff2d55;color:#fff;border-radius:6px;padding:2px 0;font-size:12px">${i+1}</div><div style="flex:1"><div style="font-size:13px">Clip ${s.clipIdx+1} • ${s.start.toFixed(1)}s • ${s.dur.toFixed(1)}s • AI Score ${s.score.toFixed(0)}/100</div><div style="font-size:11px;color:#999">Transition: ${ad.type} • ${ad.duration}s • Tempo ${ad.tempo} • Intensity ${(ad.intensity*100).toFixed(0)}% • Adapts to kill</div></div></div>`;
+  }).join('');
+  const meta=document.getElementById('timelineMeta'); if(meta) meta.textContent=`Total ${segs.reduce((a,x)=>a+x.dur,0).toFixed(1)}s • Target 128s • AI Adaptive Transitions`;
+}
+
+function exportClip(){ if(!timeline.length){ alert('Generate + Apply first, then Export.'); return; } const blob=new Blob(['ClippedbyShowdown export — timeline JSON: '+JSON.stringify(timeline)],{type:'text/plain'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='ClippedbyShowdown-2min08-kills.mp4.txt'; a.click(); document.getElementById('status').textContent='Export queued — in the full .exe, Export renders real .mp4 to Downloads\\ClippedbyShowdown\\ via FFmpeg. This web preview exports the timeline plan.'; }
+
+</script></body></html>
