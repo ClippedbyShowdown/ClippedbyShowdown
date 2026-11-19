@@ -17,6 +17,6 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - run: npm install -g @tauri-apps/cli@latest
       - run: npm install
-      - run: npx tauri build
+      - run: type src-tauri\tauri.conf.json
       - uses: actions/upload-artifact@v4
         with: { name: ClippedbyShowdown-Windows-Setup, path: src-tauri/target/release/bundle/**/*.exe }
