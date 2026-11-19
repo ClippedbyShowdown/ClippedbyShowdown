@@ -7,16 +7,11 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-      - name: List files
-        run: |
-          Get-ChildItem -Recurse | Select-Object FullName
-          echo "--- package.json search ---"
-          Get-ChildItem -Recurse -Filter package.json | Select-Object FullName
       - uses: actions/setup-node@v4
         with: { node-version: 20 }
       - uses: dtolnay/rust-toolchain@stable
       - run: npm install -g @tauri-apps/cli@latest
       - run: npm install
-      - run: type src-tauri\tauri.conf.json
+      - run: npx tauri build
       - uses: actions/upload-artifact@v4
         with: { name: ClippedbyShowdown-Windows-Setup, path: src-tauri/target/release/bundle/**/*.exe }
