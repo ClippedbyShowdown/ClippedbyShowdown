@@ -48,6 +48,28 @@ jobs:
           '@
           Set-Content -Path src-tauri/tauri.conf.json -Value $c -Encoding utf8
           Get-Content src-tauri/tauri.conf.json
+- name: Fix capabilities
+  shell: pwsh
+  run: |
+    $cap = @'
+    {
+      "$schema": "../gen/schemas/desktop-schema.json",
+      "identifier": "default",
+      "description": "Capability for the main window",
+      "windows": ["main"],
+      "permissions": [
+        "core:default",
+        "core:window:default",
+        "core:app:default",
+        "core:event:default",
+        "core:image:default",
+        "core:path:default",
+        "core:resources:default"
+      ]
+    }
+    '@
+    Set-Content -Path src-tauri/capabilities/default.json -Value $cap -Encoding utf8
+    Get-Content src-tauri/capabilities/default.json
       - run: npm install -g @tauri-apps/cli@latest
       - run: npm install
       - run: npx tauri build
