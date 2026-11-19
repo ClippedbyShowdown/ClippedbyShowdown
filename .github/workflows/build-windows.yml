@@ -5,6 +5,9 @@ on:
 jobs:
   build:
     runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: ClippedbyShowdown
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -14,4 +17,4 @@ jobs:
       - run: npm install
       - run: npx tauri build
       - uses: actions/upload-artifact@v4
-        with: { name: ClippedbyShowdown-Windows-Setup, path: src-tauri/target/release/bundle/**/*.exe }
+        with: { name: ClippedbyShowdown-Windows-Setup, path: ClippedbyShowdown/src-tauri/target/release/bundle/**/*.exe }
