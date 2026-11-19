@@ -10,6 +10,44 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 20 }
       - uses: dtolnay/rust-toolchain@stable
+      - name: Fix tauri.conf.json
+        shell: pwsh
+        run: |
+          $c = @'
+          {
+            "productName": "ClippedbyShowdown",
+            "version": "1.0.1",
+            "identifier": "com.clippedbyshowdown.app",
+            "build": {
+              "frontendDist": "../src",
+              "devUrl": "http://localhost:1420",
+              "beforeDevCommand": "",
+              "beforeBuildCommand": ""
+            },
+            "app": {
+              "withGlobalTauri": true,
+              "windows": [
+                {
+                  "title": "ClippedbyShowdown - CLIP IT. PROVE IT. POST IT.",
+                  "width": 1280,
+                  "height": 800,
+                  "minWidth": 900,
+                  "minHeight": 600,
+                  "resizable": true,
+                  "fullscreen": false
+                }
+              ],
+              "security": { "csp": null }
+            },
+            "bundle": {
+              "active": true,
+              "targets": ["nsis"],
+              "category": "Utility"
+            }
+          }
+          '@
+          Set-Content -Path src-tauri/tauri.conf.json -Value $c -Encoding utf8
+          Get-Content src-tauri/tauri.conf.json
       - run: npm install -g @tauri-apps/cli@latest
       - run: npm install
       - run: npx tauri build
