@@ -8,6 +8,7 @@
 "identifier"
 :
 "com.clippedbyshowdown.app",
+
 "build"
 :
 {
@@ -24,34 +25,40 @@
 :
 ""
 },
+
 "app"
 :
 {
 "withGlobalTauri"
 :
 true,
+
 "windows"
 :
 [
 1 item
 ],
+
 "security"
 :
 {
 1 key
 }
 },
+
 "bundle"
 :
 {
 "active"
 :
 true,
+
 "targets"
 :
 [
 2 items
 ],
+
 "icon"
 :
 [
