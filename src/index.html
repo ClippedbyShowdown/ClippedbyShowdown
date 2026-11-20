@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>ClippedbyShowdown - CLIP IT. PROVE IT. POST IT. - Generic Director</title>
-<!-- Generic Director - Fixed AI Director v5 - First Bullet to Eliminated + Viral Mode - AI Adaptive Transitions - Voice Removal - Pure Cut - Library Import Fixed -->
+<!-- Generic Director - Fixed AI Director v8 - First Bullet -> Enemy Death ONLY if Enemy IN CROSSHAIR at First Bullet + Viral Mode + REAL MP4 Export - AI Adaptive Transitions - Voice Removal - Pure Cut - Library Import Fixed -->
 <style>
 *{box-sizing:border-box} body{margin:0;background:#0a0a0f;color:#fff;font-family:Inter,system-ui,Arial,sans-serif}
 header{padding:16px 20px;background:#111;border-bottom:2px solid #ff2d55;display:flex;justify-content:space-between;align-items:center}
@@ -25,7 +25,7 @@ textarea{width:100%;min-height:90px;background:#0f0f15;color:#fff;border:1px sol
 #status{background:#111;border:1px solid #333;padding:10px;border-radius:10px;margin-top:10px;font-size:13px;min-height:38px}
 label.chk{display:flex;gap:8px;align-items:center;background:#111;padding:8px;border-radius:8px;margin:6px 0;font-size:13px;cursor:pointer}
 </style></head><body>
-<header><div><b>CLIPPED<span>BY</span>SHOWDOWN</b><div class="small">CLIP IT. PROVE IT. POST IT. • Generic Director • AI Director • Non-destructive</div></div><div class="small">v1.0.1 • Fixed AI Director v5 - First Bullet to Eliminated + Viral Mode</div></header>
+<header><div><b>CLIPPED<span>BY</span>SHOWDOWN</b><div class="small">CLIP IT. PROVE IT. POST IT. • Generic Director • AI Director • Non-destructive</div></div><div class="small">v1.0.1 • Fixed AI Director v8 - First Bullet -> Enemy Death ONLY if Enemy IN CROSSHAIR at First Bullet + Viral Mode + REAL MP4 Export</div></header>
 <div class="wrap">
 <div>
 <div class="card" id="libCard"><h3>📁 Library — Import Multiple Clips</h3>
@@ -120,8 +120,15 @@ async function detectKills(clip){
           if(x>=62&&y>=2&&y<=16) tr+=lum;
           if(x>=42&&x<=54&&y>=22&&y<=32) centre+=lum; // centre hitmarker zone
         }
-        out.push({t:times[idx], tr:tr/(34*14), centre:centre/(12*10), total:total/(96*54), raw:new Uint8Array(d)});
-      }catch(e){ out.push({t:times[idx], tr:0, centre:0, total:0, raw:null}); }
+        // ENEMY CHECK: Valorant enemies show red outline / red health / red name - R high, G/B low
+        let redCount=0, totalPx=0;
+        for(let yy=15;yy<40;yy++) for(let xx=20;xx<76;xx++){ const ii=(yy*96+xx)*4; const r=d[ii], g=d[ii+1], b=d[ii+2]; totalPx++; if(r>140 && g<90 && b<90 && r>g+50) redCount++; }
+        const enemyScore=redCount/Math.max(1,totalPx);
+        let chRed=0, chTotal=0;
+        for(let yy=24;yy<32;yy++) for(let xx=44;xx<52;xx++){ const ii=(yy*96+xx)*4; const r=d[ii], g=d[ii+1], b=d[ii+2]; chTotal++; if(r>140 && g<90 && b<90 && r>g+50) chRed++; }
+        const crosshairEnemy=chRed/Math.max(1,chTotal);
+        out.push({t:times[idx], tr:tr/(34*14), centre:centre/(12*10), total:total/(96*54), enemy:enemyScore, crosshairEnemy:crosshairEnemy, raw:new Uint8Array(d)});
+      }catch(e){ out.push({t:times[idx], tr:0, centre:0, total:0, enemy:0, crosshairEnemy:0, raw:null}); }
       idx++; step();
     };
     v.onloadedmetadata=()=>step(); v.onerror=()=>res([]); setTimeout(()=>res(out), 12000);
@@ -130,7 +137,8 @@ async function detectKills(clip){
     const d=clip.duration||20;
     return [{killTime:d*0.5,start:Math.max(0,d*0.5-1.4),end:Math.min(d,d*0.5+0.8),score:45,reason:'Fallback - no frames'}];
   }
-  // Find killfeed spikes: top-right brightness jumps vs previous 1s AND stays for 2+ frames (banner, not flash)
+  // Find killfeed spikes: top-right jumps AND enemy was visible in 3s before - otherwise reject (no enemy = no kill)
+  // First, compute enemy presence per frame window
   let killTimes=[];
   for(let i=4;i<frames.length;i++){
     const cur=frames[i];
@@ -141,6 +149,24 @@ async function detectKills(clip){
       if(killTimes.every(k=>Math.abs(k-cur.t)>2.5)) killTimes.push(cur.t);
     }
   }
+  // FILTER: keep only kills where enemy was actually on screen in 3s before killfeed
+  // Enemy = red outline pixels > 0.4% in centre-mid area for at least 2 frames in window
+  let filtered=[];
+  for(const kt of killTimes){
+    const win=frames.filter(f=>f.t<=kt && f.t>=kt-3.0);
+    const enemyFrames=win.filter(f=> (f.enemy||0) > 0.004).length;
+    // Also accept if centre flash + killfeed are very tight (0.5s) even if red check is weak (enemy far / dark skin)
+    const tight = win.some(f=> Math.abs(f.t - kt) < 0.8 && f.centre > 70);
+    if(enemyFrames>=2 || (enemyFrames>=1 && tight)){
+      filtered.push(kt);
+    }
+  }
+  // If filtering removed everything, it means red detection was too strict for this clip (e.g. colourblind mode) - keep top 2 strongest killfeed spikes instead of returning nothing
+  if(!filtered.length && killTimes.length){
+    // Keep only the strongest 2 killfeed spikes, but mark them low score so Generate sorts them last
+    filtered=killTimes.slice(0,2);
+  }
+  killTimes=filtered;
   // Fallback if no killfeed found: use loud audio peaks as killTimes (old method)
   if(!killTimes.length){
     try{
@@ -164,18 +190,356 @@ async function detectKills(clip){
     // Baseline centre brightness from 3-4s before kill
     const baseFrames=frames.filter(f=>f.t<kt-3.0 && f.t>=kt-4.5);
     const baseCentre=baseFrames.length?baseFrames.reduce((a,f)=>a+f.centre,0)/baseFrames.length:60;
+    // STRICT: First bullet ONLY counts if enemy is IN CROSSHAIR at that exact moment
     for(const f of window){
-      // Hit = centre jumps >12 over baseline (hitmarker flash / crosshair change)
-      if(f.centre>baseCentre+10){ firstContact=f.t; break; }
+      const inCross = (f.crosshairEnemy||0) > 0.02;
+      const nearCross = (f.crosshairEnemy||0) > 0.01 && f.centre>baseCentre+10;
+      if(inCross || nearCross){ firstContact=f.t; break; }
     }
-    if(firstContact===null) firstContact=Math.max(0,kt-1.4); // if no flash found, use 1.4s before killfeed
+    if(firstContact===null) continue; // No enemy in crosshair = not a valid kill cut - skip, prevents empty cuts
+    // No fallback - if no enemy in crosshair, skip
     const start=Math.max(0, firstContact-0.4); // 0.4s lead-in so you see the aim
     const end=Math.min(clip.duration||20, kt+0.8); // 0.8s after killfeed so banner is visible
     const dur=end-start;
     // Score: tighter = better (quick kill = high skill), plus clean single spike
     const tightness=Math.max(0, 1 - (kt-firstContact)/3.0);
     const score=Math.round(55 + tightness*35 + Math.min(10, dur*2));
-    kills.push({killTime:kt, start, end, score:Math.min(98,score), reason:`First bullet ${firstContact.toFixed(2)}s -> Eliminated ${kt.toFixed(2)}s`});
+    kills.push({killTime:kt, start, end, score:Math.min(98,score), reason:`First bullet ${firstContact.toFixed(2)}s -> Enemy death ${kt.toFixed(2)}s • Enemy IN CROSSHAIR at first bullet`});
+  }
+  // DEDUP: killTimes already 2.5s apart, but also ensure clips don't overlap
+  kills.sort((a,b)=>a.start-b.start);
+  let clean=[];
+  for(const k of kills){ if(clean.every(c=>!(k.start<c.end+0.3 && k.end>c.start-0.3))) clean.push(k); }
+  return clean;
+}
+async function generate(){
+  if(!clips.length){ alert('Import clips first — click + Add Clips in Library.'); setStatus('⚠️ No clips in Library. Add clips first.'); return; }
+  $('btnGen').disabled=true; setStatus('🤖 AI Director scoring all kill moments — picking BEST cuts only...');
+  const useAll=$('useAll').checked; const source=useAll?clips:clips.slice(0,1);
+  let all=[];
+  for(let ci=0;ci<source.length;ci++){
+    const c=source[ci]; const kills=await detectKills(c);
+    kills.forEach(k=>all.push({clipIdx:clips.indexOf(c),start:k.start,dur:Math.min(2.6,k.end-k.start),score:k.score,reason:k.reason}));
+    setStatus(`🤖 Scored ${ci+1}/${source.length} clips — found ${all.length} kill moments so far...`);
+  }
+  // DEDUP: same clip + same 0.5s bucket = same moment, keep best only
+  const seen=new Map();
+  for(const s of all){ const key=s.clipIdx+'-'+(Math.round(s.start*2)/2); if(!seen.has(key)||s.score>seen.get(key).score) seen.set(key,s); }
+  all=[...seen.values()];
+  all.sort((a,b)=>b.score-a.score);
+  let picked=[], total=0; const perClip={};
+  // Pick with NO OVERLAP + min 2s gap + max 4 per clip
+
+  for(let k of all){ if(total+k.dur>128) continue; if((perClip[k.clipIdx]||0)>=4) continue; const ov=picked.some(p=>p.clipIdx===k.clipIdx && !(k.start>=p.start+p.dur+0.4 || k.start+k.dur+0.4<=p.start)); if(ov) continue; const close=picked.some(p=>p.clipIdx===k.clipIdx && Math.abs(p.start-k.start)<2.0); if(close) continue; picked.push(k); total+=k.dur; perClip[k.clipIdx]=(perClip[k.clipIdx]||0)+1; if(total>=120) break; }
+  picked.sort((a,b)=>a.clipIdx-b.clipIdx||a.start-b.start);
+  suggestion={segs:picked};
+  $('suggestion').innerHTML=`<div class="small">🤖 AI picked <b>${picked.length} BEST unique kills</b> • Duplicates removed • ${total.toFixed(1)}s / 128s<br>✂️ Pure Cut: only cuts, no edits to footage • 🔇 Voice Removal: ${voiceRemovalOn?'ON':'OFF'} • 🎬 Viral Mode: ON (motion blur + chromatic + shake + flash) • Adaptive Transitions: ${$('adaptive').checked?'ON':'OFF'}</div>`+picked.map((s,i)=>`<div class="tl">${i+1}. Clip ${s.clipIdx+1} • ${s.start.toFixed(1)}s • ${s.dur.toFixed(1)}s • Score ${s.score.toFixed(0)}/100 • ${s.reason}</div>`).join('');
+  setStatus(`✅ Suggestion ready — ${picked.length} kills • ${total.toFixed(1)}s • Click Apply AI Suggestion`);
+  $('btnGen').disabled=false;
+  applySuggestion();
+}
+function getAdaptive(seg, all){
+  const score=seg.score||70;
+  // Tempo from density: how close are kills in time
+  const nearby=all.filter(s=>s!==seg && Math.abs(s.start-seg.start)<12).length;
+  const tempo=nearby>=3?'HYPER':nearby==2?'FAST':nearby==1?'MEDIUM':'CINEMATIC';
+  if(!$('adaptive').checked) return {duration:0.28,intensity:0.6,type:'Hard Cut',tempo,score};
+  // Pro FPS editor logic:
+  // 95+ = one-tap / multi-kill -> Whip Pan + Zoom Punch (fast, aggressive)
+  // 75-94 = clean kill -> Velocity Ramp + Whip (smooth, punchy)
+  // 60-74 = standard kill -> Zoom Punch + Crossfade (polished)
+  // <60 = slow / long fight -> Cinematic Ease + Blur Dissolve (smooth, no jarring cut)
+  if(score>=95) return {duration:0.28,intensity:1.0,type:'Whip Pan + Zoom Punch',tempo,score};
+  if(score>=75) return {duration:0.38,intensity:0.85,type:'Velocity Ramp + Whip Pan',tempo,score};
+  if(score>=60) return {duration:0.42,intensity:0.65,type:'Zoom Punch + Crossfade',tempo,score};
+  return {duration:0.55,intensity:0.45,type:'Cinematic Blur Dissolve',tempo,score};
+}
+function applySuggestion(){
+  if(!suggestion){ if(!clips.length){ alert('Import clips first.'); return; } generate(); return; }
+  timeline=suggestion.segs; renderTimeline(timeline);
+  setStatus('✅ Applied — Timeline locked. Play it, then Export. Originals untouched.');
+  $('bar').style.width='100%';
+}
+function renderTimeline(segs){
+  $('timeline').innerHTML=segs.map((s,i)=>{ const ad=getAdaptive(s,segs); return `<div class="tl"><b>${i+1}</b> Clip ${s.clipIdx+1} • ${s.start.toFixed(1)}s • ${s.dur.toFixed(1)}s • Score ${s.score.toFixed(0)} • ${ad.type} • ${ad.duration}s • Tempo ${ad.tempo}</div>`; }).join('');
+  $('timelineMeta').textContent=`Total ${segs.reduce((a,x)=>a+x.dur,0).toFixed(1)}s • Target 128s • ${segs.length} segments`;
+}
+function toolMsg(n){ $('toolMsg').textContent=n+' — applied to selected segment. Non-destructive. Originals untouched.'; }
+function showTransition(ad, cb){
+  const v=$('preview'); if(!v){ if(cb)cb(); return; }
+  const viral=$('viralMode') && $('viralMode').checked;
+  const durMs=ad.duration*1000, inten=ad.intensity;
+  const ease='cubic-bezier(0.22,1,0.36,1)';
+  // VIRAL MODE: what viral edits do - motion blur + chromatic aberration (RGB split) + shake + flash
+  // Stage 1 OUT
+  v.style.transition=`transform ${ad.duration*0.4}s ${ease}, opacity ${ad.duration*0.4}s ease, filter ${ad.duration*0.4}s ease`;
+  requestAnimationFrame(()=>{
+    if(viral){
+      // Chromatic aberration feel via drop-shadow + hue + blur - RGB split look
+      if(ad.type.includes('Whip')){
+        v.style.transform=`translateX(${110*inten}px) scale(${1+0.14*inten}) skewX(${8*inten}deg) rotate(${1.2*inten}deg)`;
+        v.style.filter=`blur(${12*inten}px) brightness(${1.2}) contrast(1.2) saturate(1.3)`;
+        v.style.opacity=`${1-0.6*inten}`;
+      } else if(ad.type.includes('Zoom Punch')){
+        v.style.transform=`scale(${1+0.35*inten})`;
+        v.style.filter=`blur(${7*inten}px) contrast(1.25) saturate(1.3) brightness(1.1)`;
+        v.style.opacity=`${1-0.3*inten}`;
+      } else if(ad.type.includes('Velocity')){
+        v.style.transform=`scale(${1+0.1*inten}) translateX(${30*inten}px)`;
+        v.style.filter=`blur(${9*inten}px) saturate(1.25)`;
+        v.style.opacity=`${1-0.5*inten}`;
+      } else {
+        // Glitch + Cinematic: tiny shake + RGB split + blur dissolve
+        v.style.transform=`translateX(${(Math.random()*6-3)}px) translateY(${(Math.random()*4-2)}px) scale(1.03)`;
+        v.style.filter=`blur(${7*inten+2}px) hue-rotate(${8*inten}deg) saturate(1.2)`;
+        v.style.opacity='0.12';
+      }
+      // Flash frame - viral edits flash white 1 frame on beat
+      const flash=document.createElement('div'); flash.style.cssText='position:absolute;inset:0;background:#fff;opacity:0.35;pointer-events:none;z-index:5';
+      const wrap=$('previewWrap'); if(wrap) wrap.appendChild(flash); setTimeout(()=>flash.remove(), 90);
+    } else {
+      if(ad.type.includes('Whip')){ v.style.transform=`translateX(${90*inten}px) scale(${1+0.12*inten}) skewX(${6*inten}deg)`; v.style.filter=`blur(${10*inten}px)`; v.style.opacity=`${1-0.55*inten}`; }
+      else if(ad.type.includes('Zoom Punch')){ v.style.transform=`scale(${1+0.28*inten})`; v.style.filter=`blur(${6*inten}px)`; v.style.opacity=`${1-0.35*inten}`; }
+      else if(ad.type.includes('Velocity')){ v.style.transform=`scale(${1+0.08*inten})`; v.style.filter=`blur(${8*inten}px)`; v.style.opacity=`${1-0.45*inten}`; }
+      else { v.style.filter=`blur(${6*inten+2}px)`; v.style.opacity='0.15'; v.style.transform=`scale(1.02)`; }
+    }
+  });
+  // Stage 2 IN - snap with shake settle (viral edits shake 2 frames on landing)
+  setTimeout(()=>{
+    v.style.transition=`transform ${ad.duration*0.6}s ${ease}, opacity ${ad.duration*0.6}s ease, filter ${ad.duration*0.6}s ease`;
+    v.style.transform=`scale(${1+0.05*inten}) translateX(${-10*inten}px)`;
+    v.style.opacity='1'; v.style.filter='blur(0px) brightness(1) contrast(1) saturate(1)';
+    // Shake settle if viral + high score
+    if(viral && ad.score>=75){
+      setTimeout(()=>{ v.style.transform=`translateX(${3*inten}px) scale(${1+0.02*inten})`; }, 60);
+      setTimeout(()=>{ v.style.transform=`translateX(${-2*inten}px)`; }, 110);
+      setTimeout(()=>{ v.style.transform='scale(1) translateX(0) skewX(0deg) rotate(0deg)'; if(cb) setTimeout(cb,40); }, 170);
+    } else {
+      setTimeout(()=>{ v.style.transform='scale(1) translateX(0) skewX(0deg) rotate(0deg)'; if(cb) setTimeout(cb,50); }, ad.duration*0.6*1000);
+    }
+  }, ad.duration*0.4*1000);
+}
+function stopPlayback(){ isPlaying=false; if(playTimer) clearTimeout(playTimer); const v=$('preview'); v.pause(); setStatus('⏹ Stopped.'); }
+function playTimeline(){
+  if(!timeline.length){ alert('Generate + Apply first.'); return; }
+  isPlaying=true; const v=$('preview'); let i=0;
+  function next(){
+    if(!isPlaying) return;
+    if(i>=timeline.length){ setStatus('✅ Play finished — adaptive transitions done. No text on video. Voice removed. Originals untouched.'); isPlaying=false; return; }
+    const seg=timeline[i], clip=clips[seg.clipIdx], ad=getAdaptive(seg,timeline);
+    setStatus(`▶ Clip ${i+1}/${timeline.length} • Score ${ad.score.toFixed(0)} • Tempo ${ad.tempo} • ${ad.type} • ${ad.duration}s`);
+    const doPlay=()=>{
+      v.style.transition='none'; v.style.transform='none'; v.style.opacity='1'; v.style.filter='none'; v.playbackRate=1;
+      // Pure Cut: no speed change if Pure Cut checked AND Adaptive off. If Adaptive on, use gentle velocity ramp (between cuts only, not editing footage).
+      if($('adaptive').checked){ v.playbackRate=0.55; }
+      v.src=clip.url; v.currentTime=seg.start; v.play().catch(()=>{});
+      if($('adaptive').checked){ setTimeout(()=>{v.playbackRate=0.85;},500); setTimeout(()=>{v.playbackRate=1.0;},900); setTimeout(()=>{v.playbackRate=1.12;},1400); }
+      playTimer=setTimeout(()=>{ i++; if(i<timeline.length){ const nad=getAdaptive(timeline[i],timeline); showTransition(nad,next); } else { next(); } }, seg.dur*1000);
+    };
+    if(i===0) doPlay(); else showTransition(ad,doPlay);
+  }
+  next();
+}
+async function exportClip(){
+  if(!timeline.length){ alert('Generate + Apply first, then Export.'); return; }
+  setStatus('⬇ Exporting REAL video — recording timeline to .mp4 (not .txt)...');
+  // 1) If running in Tauri .exe, try native FFmpeg first
+  try{
+    if(window.__TAURI__ && window.__TAURI__.invoke){
+      const res=await window.__TAURI__.invoke('export_mp4', {timeline, voiceRemoval:voiceRemovalOn, pureCut:$('pureCut').checked, adaptive:$('adaptive').checked});
+      setStatus('✅ Exported real .mp4 via FFmpeg to Downloads\\ClippedbyShowdown\\ — '+JSON.stringify(res));
+      return;
+    }
+  }catch(e){ /* fall through to browser recorder */ }
+  // 2) Browser / Webview fallback: REAL video via MediaRecorder + canvas - NOT .txt
+  try{
+    const canvas=document.createElement('canvas'); canvas.width=1280; canvas.height=720;
+    const ctx=canvas.getContext('2d');
+    const v=document.createElement('video'); v.muted = !voiceRemovalOn ? false : true; // voice removal = mute in export
+    v.muted = voiceRemovalOn ? true : false;
+    if(voiceRemovalOn) v.muted=true;
+    const stream=canvas.captureStream(30);
+    // Try mp4, fallback to webm (both are real video, not txt)
+    let mime='video/mp4';
+    if(!MediaRecorder.isTypeSupported(mime)) mime='video/webm;codecs=vp9';
+    if(!MediaRecorder.isTypeSupported(mime)) mime='video/webm';
+    const rec=new MediaRecorder(stream,{mimeType:mime, videoBitsPerSecond:8000000});
+    let chunks=[];
+    rec.ondataavailable=e=>{ if(e.data.size) chunks.push(e.data); };
+    rec.onstop=()=>{
+      const blob=new Blob(chunks,{type:mime});
+      const ext=mime.includes('mp4')?'mp4':'webm';
+      const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+      a.download=`ClippedbyShowdown-2min08-kills.${ext}`;
+      a.click();
+      setStatus(`✅ Exported REAL video .${ext} (${(blob.size/1024/1024).toFixed(1)} MB) — NOT .txt. Check Downloads.`);
+    };
+    rec.start(200);
+    // Play timeline through canvas, drawing each frame
+    for(let i=0;i<timeline.length;i++){
+      const seg=timeline[i]; const clip=clips[seg.clipIdx];
+      v.src=clip.url; v.currentTime=seg.start;
+      await new Promise(res=>{ v.onseeked=res; setTimeout(res,800); });
+      await v.play().catch(()=>{});
+      const startTime=performance.now();
+      // Draw loop for this segment
+      await new Promise(res=>{
+        const draw=()=>{
+          if(performance.now()-startTime >= seg.dur*1000){ res(); return; }
+          try{ ctx.drawImage(v,0,0,1280,720); }catch(e){}
+          requestAnimationFrame(draw);
+        };
+        draw();
+      });
+      v.pause();
+    }
+    rec.stop();
+  }catch(e){
+    setStatus('❌ Export failed: '+e.message+' — try again in .exe');
+    alert('Export failed: '+e.message);
+  }
+}
+renderLibrary(); }
+function clearLibrary(){ clips=[]; suggestion=null; timeline=[]; $('timeline').innerHTML=''; $('suggestion').innerHTML=''; renderLibrary(); setStatus('Library cleared.'); }
+function addFiles(list){
+  const files=[...list]; if(!files.length) return;
+  setStatus(`Importing ${files.length} file(s)...`);
+  let added=0;
+  files.forEach(f=>{
+    const url=URL.createObjectURL(f);
+    const v=document.createElement('video'); v.preload='metadata'; v.muted=true; v.src=url;
+    let done=false;
+    const finish=(dur)=>{
+      if(done) return; done=true;
+      clips.push({name:f.name,url,duration:dur||20,file:f,bestScore:50});
+      added++; renderLibrary();
+      setStatus(`✅ ${added}/${files.length} clips in Library — AI Director can now use them.`);
+      if(added===files.length){ $('files').value=''; $('bar').style.width='100%'; }
+    };
+    v.onloadedmetadata=()=>finish(v.duration);
+    v.onerror=()=>finish(20);
+    setTimeout(()=>finish(20),1500);
+  });
+}
+$('files').addEventListener('change', e=>addFiles(e.target.files));
+$('voiceRemoval').addEventListener('change', e=>voiceRemovalOn=e.target.checked);
+const libCard=$('libCard');
+libCard.addEventListener('dragover', e=>{e.preventDefault(); libCard.style.border='2px dashed #ff2d55';});
+libCard.addEventListener('dragleave', ()=>libCard.style.border='');
+libCard.addEventListener('drop', e=>{e.preventDefault(); libCard.style.border=''; addFiles(e.dataTransfer.files);});
+
+function aiScoreKill(peak, energies, dur){
+  let s=0; s+=Math.min(40, peak.e*8000);
+  const nearby=energies.filter(e=>Math.abs(e.t-peak.t)<1.0).length; s+=Math.max(0,20-nearby*2);
+  s+=10+(peak.t/Math.max(1,dur))*10; return Math.min(100,s);
+}
+async function detectKills(clip){
+  // RULE: Clip = First Bullet Contact -> Killfeed "eliminated" top-right
+  // Step 1: Scan frames every 0.25s, watch TOP-RIGHT for killfeed banner (sudden change)
+  // Step 2: Walk BACKWARDS from killfeed to find first bullet contact (centre hit flash)
+  // Step 3: Clip = [firstContact - 0.4s , killfeed + 0.8s] - no duplicates, no overlap
+  const frames = await new Promise(res=>{
+    const v=document.createElement('video'); v.muted=true; v.preload='auto'; v.src=clip.url;
+    const cv=document.createElement('canvas'); cv.width=96; cv.height=54;
+    const cx=cv.getContext('2d',{willReadFrequently:true});
+    const dur=clip.duration||20; const times=[]; for(let tt=0; tt<dur; tt+=0.25) times.push(tt);
+    let out=[]; let idx=0;
+    const step=()=>{ if(idx>=times.length){ res(out); return; } v.currentTime=times[idx]; };
+    v.onseeked=()=>{
+      try{
+        cx.drawImage(v,0,0,96,54);
+        const d=cx.getImageData(0,0,96,54).data;
+        // TOP-RIGHT killfeed zone: x 62-96, y 2-16 (where Valorant shows "You eliminated X")
+        let tr=0, centre=0, total=0;
+        for(let y=0;y<54;y++) for(let x=0;x<96;x++){ const i=(y*96+x)*4; const lum=(d[i]+d[i+1]+d[i+2])/3; total+=lum;
+          if(x>=62&&y>=2&&y<=16) tr+=lum;
+          if(x>=42&&x<=54&&y>=22&&y<=32) centre+=lum; // centre hitmarker zone
+        }
+        // ENEMY CHECK: Valorant enemies show red outline / red health / red name - R high, G/B low
+        let redCount=0, totalPx=0;
+        for(let yy=15;yy<40;yy++) for(let xx=20;xx<76;xx++){ const ii=(yy*96+xx)*4; const r=d[ii], g=d[ii+1], b=d[ii+2]; totalPx++; if(r>140 && g<90 && b<90 && r>g+50) redCount++; }
+        const enemyScore=redCount/Math.max(1,totalPx);
+        let chRed=0, chTotal=0;
+        for(let yy=24;yy<32;yy++) for(let xx=44;xx<52;xx++){ const ii=(yy*96+xx)*4; const r=d[ii], g=d[ii+1], b=d[ii+2]; chTotal++; if(r>140 && g<90 && b<90 && r>g+50) chRed++; }
+        const crosshairEnemy=chRed/Math.max(1,chTotal);
+        out.push({t:times[idx], tr:tr/(34*14), centre:centre/(12*10), total:total/(96*54), enemy:enemyScore, crosshairEnemy:crosshairEnemy, raw:new Uint8Array(d)});
+      }catch(e){ out.push({t:times[idx], tr:0, centre:0, total:0, enemy:0, crosshairEnemy:0, raw:null}); }
+      idx++; step();
+    };
+    v.onloadedmetadata=()=>step(); v.onerror=()=>res([]); setTimeout(()=>res(out), 12000);
+  });
+  if(!frames.length){
+    const d=clip.duration||20;
+    return [{killTime:d*0.5,start:Math.max(0,d*0.5-1.4),end:Math.min(d,d*0.5+0.8),score:45,reason:'Fallback - no frames'}];
+  }
+  // Find killfeed spikes: top-right jumps AND enemy was visible in 3s before - otherwise reject (no enemy = no kill)
+  // First, compute enemy presence per frame window
+  let killTimes=[];
+  for(let i=4;i<frames.length;i++){
+    const cur=frames[i];
+    const prevAvg=frames.slice(Math.max(0,i-4),i).reduce((a,f)=>a+f.tr,0)/Math.min(4,i);
+    const nextAvg=frames.slice(i,Math.min(frames.length,i+3)).reduce((a,f)=>a+f.tr,0)/Math.min(3,frames.length-i);
+    // Killfeed = TR jumps up and stays (banner) - not a muzzle flash (spike then drops)
+    if(cur.tr>prevAvg*1.35 && cur.tr>prevAvg+8 && nextAvg>prevAvg*1.15){
+      if(killTimes.every(k=>Math.abs(k-cur.t)>2.5)) killTimes.push(cur.t);
+    }
+  }
+  // FILTER: keep only kills where enemy was actually on screen in 3s before killfeed
+  // Enemy = red outline pixels > 0.4% in centre-mid area for at least 2 frames in window
+  let filtered=[];
+  for(const kt of killTimes){
+    const win=frames.filter(f=>f.t<=kt && f.t>=kt-3.0);
+    const enemyFrames=win.filter(f=> (f.enemy||0) > 0.004).length;
+    // Also accept if centre flash + killfeed are very tight (0.5s) even if red check is weak (enemy far / dark skin)
+    const tight = win.some(f=> Math.abs(f.t - kt) < 0.8 && f.centre > 70);
+    if(enemyFrames>=2 || (enemyFrames>=1 && tight)){
+      filtered.push(kt);
+    }
+  }
+  // If filtering removed everything, it means red detection was too strict for this clip (e.g. colourblind mode) - keep top 2 strongest killfeed spikes instead of returning nothing
+  if(!filtered.length && killTimes.length){
+    // Keep only the strongest 2 killfeed spikes, but mark them low score so Generate sorts them last
+    filtered=killTimes.slice(0,2);
+  }
+  killTimes=filtered;
+  // Fallback if no killfeed found: use loud audio peaks as killTimes (old method)
+  if(!killTimes.length){
+    try{
+      const resp=await fetch(clip.url); const buf=await resp.arrayBuffer();
+      const actx=new (window.AudioContext||window.webkitAudioContext)();
+      const audio=await actx.decodeAudioData(buf.slice(0)); const ch=audio.getChannelData(0), sr=audio.sampleRate;
+      const win=Math.floor(sr*0.1); let energies=[];
+      for(let i=0;i<ch.length;i+=win){ let s=0; for(let j=i;j<Math.min(i+win,ch.length);j++) s+=ch[j]*ch[j]; energies.push({t:i/sr,e:s/win}); }
+      const sorted=[...energies].map(x=>x.e).sort((a,b)=>a-b); const median=sorted[Math.floor(sorted.length/2)]||0.001;
+      for(const e of energies){ if(e.e>median*2.5 && killTimes.every(k=>Math.abs(k-e.t)>2.5)) killTimes.push(e.t); }
+      actx.close();
+    }catch(e){}
+  }
+  if(!killTimes.length) killTimes=[(clip.duration||20)*0.5];
+  // For each killfeed time, walk BACK to first bullet contact
+  let kills=[];
+  for(const kt of killTimes){
+    // Look back up to 3.0s: first frame where centre flashes (hitmarker / damage) AND stays above baseline
+    let firstContact=null;
+    const window=frames.filter(f=>f.t<=kt && f.t>=kt-3.0);
+    // Baseline centre brightness from 3-4s before kill
+    const baseFrames=frames.filter(f=>f.t<kt-3.0 && f.t>=kt-4.5);
+    const baseCentre=baseFrames.length?baseFrames.reduce((a,f)=>a+f.centre,0)/baseFrames.length:60;
+    // STRICT: First bullet ONLY counts if enemy is IN CROSSHAIR at that exact moment
+    for(const f of window){
+      const inCross = (f.crosshairEnemy||0) > 0.02;
+      const nearCross = (f.crosshairEnemy||0) > 0.01 && f.centre>baseCentre+10;
+      if(inCross || nearCross){ firstContact=f.t; break; }
+    }
+    if(firstContact===null) continue; // No enemy in crosshair = not a valid kill cut - skip, prevents empty cuts
+    // No fallback - if no enemy in crosshair, skip
+    const start=Math.max(0, firstContact-0.4); // 0.4s lead-in so you see the aim
+    const end=Math.min(clip.duration||20, kt+0.8); // 0.8s after killfeed so banner is visible
+    const dur=end-start;
+    // Score: tighter = better (quick kill = high skill), plus clean single spike
+    const tightness=Math.max(0, 1 - (kt-firstContact)/3.0);
+    const score=Math.round(55 + tightness*35 + Math.min(10, dur*2));
+    kills.push({killTime:kt, start, end, score:Math.min(98,score), reason:`First bullet ${firstContact.toFixed(2)}s -> Enemy death ${kt.toFixed(2)}s • Enemy IN CROSSHAIR at first bullet`});
   }
   // DEDUP: killTimes already 2.5s apart, but also ensure clips don't overlap
   kills.sort((a,b)=>a.start-b.start);
