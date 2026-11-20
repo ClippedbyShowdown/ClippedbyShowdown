@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>ClippedbyShowdown - CLIP IT. PROVE IT. POST IT. - Generic Director</title>
-<!-- Generic Director - Fixed AI Director v9 - DEDUPED + Crosshair-Only + Viral Mode + REAL MP4 Export + Voice Removal in Play - AI Adaptive Transitions - Voice Removal - Pure Cut - Library Import Fixed -->
+<!-- Generic Director - Fixed AI Director v9 - DEDUPED + Crosshair-Only + <label class="chk"><input type="checkbox" id="allKills"> 🎯 Include ALL kills in clip (OFF = MY KILLS ONLY - recommended) — teammates + spectated + off-crosshair (not just my kills)</label>Viral Mode + REAL MP4 Export + Voice Removal in Play - AI Adaptive Transitions - Voice Removal - Pure Cut - Library Import Fixed -->
 <style>
 *{box-sizing:border-box} body{margin:0;background:#0a0a0f;color:#fff;font-family:Inter,system-ui,Arial,sans-serif}
 header{padding:16px 20px;background:#111;border-bottom:2px solid #ff2d55;display:flex;justify-content:space-between;align-items:center}
@@ -25,7 +25,7 @@ textarea{width:100%;min-height:90px;background:#0f0f15;color:#fff;border:1px sol
 #status{background:#111;border:1px solid #333;padding:10px;border-radius:10px;margin-top:10px;font-size:13px;min-height:38px}
 label.chk{display:flex;gap:8px;align-items:center;background:#111;padding:8px;border-radius:8px;margin:6px 0;font-size:13px;cursor:pointer}
 </style></head><body>
-<header><div><b>CLIPPED<span>BY</span>SHOWDOWN</b><div class="small">CLIP IT. PROVE IT. POST IT. • Generic Director • AI Director • Non-destructive</div></div><div class="small">v1.0.1 • Fixed AI Director v9 - DEDUPED + Crosshair-Only + Viral Mode + REAL MP4 Export + Voice Removal in Play</div></header>
+<header><div><b>CLIPPED<span>BY</span>SHOWDOWN</b><div class="small">CLIP IT. PROVE IT. POST IT. • Generic Director • AI Director • Non-destructive</div></div><div class="small">v1.0.1 • Fixed AI Director v12 - MY KILLS ONLY by Default (Teammate Kills Excluded) + Visual FX Panel (FX Must Be Requested) + REAL MP4 Export</div></header>
 <div class="wrap">
 <div>
 <div class="card" id="libCard"><h3>📁 Library — Import Multiple Clips</h3>
@@ -36,6 +36,18 @@ label.chk{display:flex;gap:8px;align-items:center;background:#111;padding:8px;bo
 <div id="library"></div></div>
 <div class="card"><h3>🤖 AI Director</h3>
 <label class="chk"><input type="checkbox" id="useAll" checked> Use All Clips in Library (AI Director)</label>
+<div class="card" id="fxCard"><h3>✨ Visual FX Panel — FX Must Be Requested</h3>
+<div class="small">Nothing here applies unless you tick it. AI Director will only use FX you request. Unticked = clean cut, no FX.</div>
+<label class="chk"><input type="checkbox" id="fxChromatic"> Chromatic Aberration — RGB split / red-blue fringe (viral edits)</label>
+<label class="chk"><input type="checkbox" id="fxGlitch"> Glitch — slice / scan-line glitch on cut</label>
+<label class="chk"><input type="checkbox" id="fxShake"> Shake — 2-frame shake on landing</label>
+<label class="chk"><input type="checkbox" id="fxFlash"> Flash — white flash frame on beat cut</label>
+<label class="chk"><input type="checkbox" id="fxMotionBlur"> Motion Blur — blur on whip / fast move</label>
+<label class="chk"><input type="checkbox" id="fxZoomPunch"> Zoom Punch — punch-in on kill</label>
+<label class="chk"><input type="checkbox" id="fxSpeedRamp"> Speed Ramp — 0.55x → 1.12x ramp on kill</label>
+<label class="chk"><input type="checkbox" id="fxColorShake"> Color Shake — colour shift + shake (viral colour shake)</label>
+<div class="small" style="margin-top:8px">Tip: For viral look, tick Chromatic + Shake + Flash + Motion Blur. For clean pro look, tick only Zoom Punch + Speed Ramp.</div>
+</div>
 <label class="chk"><input type="checkbox" id="voiceRemoval" checked> 🔇 Remove Voice Comms — Discord / game chat removed, game audio kept</label>
 <label class="chk"><input type="checkbox" id="pureCut" checked> ✂️ Pure Cut Mode — AI only cuts, never edits footage itself</label>
 <label class="chk"><input type="checkbox" id="adaptive" checked> 🎬 AI Adaptive Transitions — transition adapts to AI score / tempo</label>
@@ -197,15 +209,25 @@ async function detectKills(clip){
       const nearCross = (f.crosshairEnemy||0) > 0.01 && f.centre>baseCentre+10;
       if(inCross || nearCross){ firstContact=f.t; break; }
     }
-    if(firstContact===null) continue; // No enemy in crosshair = not a valid kill cut - skip, prevents empty cuts
+    if(firstContact===null){
+      if($('allKills') && $('allKills').checked){ firstContact=Math.max(0,kt-1.2); }
+      else { continue; }
+    }
+    // MY KILLS ONLY (default): killfeed must be within 2.0s of first bullet AND enemy was in crosshair at first bullet
+    // Teammate kills fail this - their killfeed appears but you had no enemy in crosshair, so they get skipped
+    const isMyKillCheck = frames.some(f=>Math.abs(f.t-firstContact)<0.35 && (f.crosshairEnemy||0)>0.01);
+    if(!isMyKillCheck && !($('allKills') && $('allKills').checked)){ continue; }
+      else { continue; }
+    }
     // No fallback - if no enemy in crosshair, skip
     const start=Math.max(0, firstContact-0.4); // 0.4s lead-in so you see the aim
     const end=Math.min(clip.duration||20, kt+0.8); // 0.8s after killfeed so banner is visible
     const dur=end-start;
     // Score: tighter = better (quick kill = high skill), plus clean single spike
     const tightness=Math.max(0, 1 - (kt-firstContact)/3.0);
-    const score=Math.round(55 + tightness*35 + Math.min(10, dur*2));
-    kills.push({killTime:kt, start, end, score:Math.min(98,score), reason:`First bullet ${firstContact.toFixed(2)}s -> Enemy death ${kt.toFixed(2)}s • Enemy IN CROSSHAIR at first bullet`});
+    const isMyKill = frames.some(f=>Math.abs(f.t-firstContact)<0.3 && (f.crosshairEnemy||0)>0.01);
+    const score=Math.round(55 + tightness*35 + Math.min(10, dur*2) + (isMyKill?0:-12));
+    kills.push({killTime:kt, start, end, score:Math.min(98,score), reason: (frames.some(f=>Math.abs(f.t-firstContact)<0.3 && (f.crosshairEnemy||0)>0.01) ? `First bullet ${firstContact.toFixed(2)}s -> Enemy death ${kt.toFixed(2)}s • MY KILL - Enemy IN CROSSHAIR` : `Killfeed ${kt.toFixed(2)}s -> Enemy death • TEAM / SPECTATED KILL - All Kills mode`)});
   }
   // DEDUP: killTimes already 2.5s apart, but also ensure clips don't overlap
   kills.sort((a,b)=>a.start-b.start);
@@ -235,7 +257,7 @@ async function generate(){
   picked.sort((a,b)=>a.clipIdx-b.clipIdx||a.start-b.start);
   if(!picked.length){ setStatus('⚠️ No cuts passed Crosshair check - no enemy in crosshair at first bullet in these clips. Try clips where enemy is centred when you shoot.'); $('btnGen').disabled=false; return; }
   suggestion={segs:picked};
-  $('suggestion').innerHTML=`<div class="small">🤖 AI picked <b>${picked.length} BEST unique kills</b> • Duplicates removed • ${total.toFixed(1)}s / 128s<br>✂️ Pure Cut: only cuts, no edits to footage • 🔇 Voice Removal: ${voiceRemovalOn?'ON':'OFF'} • 🎬 Viral Mode: ON (motion blur + chromatic + shake + flash) • Adaptive Transitions: ${$('adaptive').checked?'ON':'OFF'}</div>`+picked.map((s,i)=>`<div class="tl">${i+1}. Clip ${s.clipIdx+1} • ${s.start.toFixed(1)}s • ${s.dur.toFixed(1)}s • Score ${s.score.toFixed(0)}/100 • ${s.reason}</div>`).join('');
+  $('suggestion').innerHTML=`<div class="small">🤖 AI picked <b>${picked.length} BEST unique kills</b> • Duplicates removed • ${total.toFixed(1)}s / 128s<br>✂️ Pure Cut: only cuts, no edits to footage • 🔇 Voice Removal: ${voiceRemovalOn?'ON':'OFF'} • 🎬 FX Requested: Chromatic/Glitch/Shake/Flash/Blur/Zoom/Ramp/ColorShake as ticked • Viral Mode: ON (motion blur + chromatic + shake + flash) • Adaptive Transitions: ${$('adaptive').checked?'ON':'OFF'}</div>`+picked.map((s,i)=>`<div class="tl">${i+1}. Clip ${s.clipIdx+1} • ${s.start.toFixed(1)}s • ${s.dur.toFixed(1)}s • Score ${s.score.toFixed(0)}/100 • ${s.reason}</div>`).join('');
   setStatus(`✅ Suggestion ready — ${picked.length} kills • ${total.toFixed(1)}s • Click Apply AI Suggestion`);
   $('btnGen').disabled=false;
   applySuggestion();
@@ -269,7 +291,19 @@ function renderTimeline(segs){
 function toolMsg(n){ $('toolMsg').textContent=n+' — applied to selected segment. Non-destructive. Originals untouched.'; }
 function showTransition(ad, cb){
   const v=$('preview'); if(!v){ if(cb)cb(); return; }
-  const viral=$('viralMode') && $('viralMode').checked;
+  const fx = {
+    chromatic: $('fxChromatic') && $('fxChromatic').checked,
+    glitch: $('fxGlitch') && $('fxGlitch').checked,
+    shake: $('fxShake') && $('fxShake').checked,
+    flash: $('fxFlash') && $('fxFlash').checked,
+    blur: $('fxMotionBlur') && $('fxMotionBlur').checked,
+    zoom: $('fxZoomPunch') && $('fxZoomPunch').checked,
+    ramp: $('fxSpeedRamp') && $('fxSpeedRamp').checked,
+    colorShake: $('fxColorShake') && $('fxColorShake').checked
+  };
+  const anyFx = Object.values(fx).some(Boolean);
+  // VISUAL FX MUST BE REQUESTED: if no FX ticked, force clean cut - no viral FX, no flash, no shake
+  const viral = ($('viralMode') && $('viralMode').checked) && anyFx;
   const durMs=ad.duration*1000, inten=ad.intensity;
   const ease='cubic-bezier(0.22,1,0.36,1)';
   // VIRAL MODE: what viral edits do - motion blur + chromatic aberration (RGB split) + shake + flash
@@ -297,8 +331,8 @@ function showTransition(ad, cb){
         v.style.opacity='0.12';
       }
       // Flash frame - viral edits flash white 1 frame on beat
-      const flash=document.createElement('div'); flash.style.cssText='position:absolute;inset:0;background:#fff;opacity:0.35;pointer-events:none;z-index:5';
-      const wrap=$('previewWrap'); if(wrap) wrap.appendChild(flash); setTimeout(()=>flash.remove(), 90);
+      if(fx.flash){ const flash=document.createElement('div'); flash.style.cssText='position:absolute;inset:0;background:#fff;opacity:0.35;pointer-events:none;z-index:5';
+      const wrap=$('previewWrap'); if(wrap) wrap.appendChild(flash); setTimeout(()=>flash.remove(), 90); }
     } else {
       if(ad.type.includes('Whip')){ v.style.transform=`translateX(${90*inten}px) scale(${1+0.12*inten}) skewX(${6*inten}deg)`; v.style.filter=`blur(${10*inten}px)`; v.style.opacity=`${1-0.55*inten}`; }
       else if(ad.type.includes('Zoom Punch')){ v.style.transform=`scale(${1+0.28*inten})`; v.style.filter=`blur(${6*inten}px)`; v.style.opacity=`${1-0.35*inten}`; }
@@ -312,7 +346,7 @@ function showTransition(ad, cb){
     v.style.transform=`scale(${1+0.05*inten}) translateX(${-10*inten}px)`;
     v.style.opacity='1'; v.style.filter='blur(0px) brightness(1) contrast(1) saturate(1)';
     // Shake settle if viral + high score
-    if(viral && ad.score>=75){
+    if(viral && fx.shake && ad.score>=75){
       setTimeout(()=>{ v.style.transform=`translateX(${3*inten}px) scale(${1+0.02*inten})`; }, 60);
       setTimeout(()=>{ v.style.transform=`translateX(${-2*inten}px)`; }, 110);
       setTimeout(()=>{ v.style.transform='scale(1) translateX(0) skewX(0deg) rotate(0deg)'; if(cb) setTimeout(cb,40); }, 170);
@@ -333,9 +367,9 @@ function playTimeline(){
     const doPlay=()=>{
       v.style.transition='none'; v.style.transform='none'; v.style.opacity='1'; v.style.filter='none'; v.playbackRate=1;
       // Pure Cut: no speed change if Pure Cut checked AND Adaptive off. If Adaptive on, use gentle velocity ramp (between cuts only, not editing footage).
-      if($('adaptive').checked){ v.playbackRate=0.55; }
+      if($('adaptive').checked && $('fxSpeedRamp') && $('fxSpeedRamp').checked){ v.playbackRate=0.55; }
       v.src=clip.url; v.muted = voiceRemovalOn ? true : false; v.currentTime=seg.start; v.play().catch(()=>{});
-      if($('adaptive').checked){ setTimeout(()=>{v.playbackRate=0.85;},500); setTimeout(()=>{v.playbackRate=1.0;},900); setTimeout(()=>{v.playbackRate=1.12;},1400); }
+      if($('adaptive').checked && $('fxSpeedRamp') && $('fxSpeedRamp').checked){ setTimeout(()=>{v.playbackRate=0.85;},500); setTimeout(()=>{v.playbackRate=1.0;},900); setTimeout(()=>{v.playbackRate=1.12;},1400); },1400); }
       playTimer=setTimeout(()=>{ i++; if(i<timeline.length){ const nad=getAdaptive(timeline[i],timeline); showTransition(nad,next); } else { next(); } }, seg.dur*1000);
     };
     if(i===0) doPlay(); else showTransition(ad,doPlay);
