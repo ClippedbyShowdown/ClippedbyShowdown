@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>ClippedbyShowdown - CLIP IT. PROVE IT. POST IT. - Generic Director</title>
-<!-- Generic Director - Fixed AI Director v9 - DEDUPED + Crosshair-Only + <label class="chk"><input type="checkbox" id="allKills"> 🎯 Include ALL kills in clip (OFF = MY KILLS ONLY - recommended) — teammates + spectated + off-crosshair (not just my kills)</label>Viral Mode + REAL MP4 Export + Voice Removal in Play - AI Adaptive Transitions - Voice Removal - Pure Cut - Library Import Fixed -->
+<!-- ClippedbyShowdown - Generic Director - FIXED My Kills Only v13 - Library + Editor + Import + Export All Working -->
 <style>
 *{box-sizing:border-box} body{margin:0;background:#0a0a0f;color:#fff;font-family:Inter,system-ui,Arial,sans-serif}
 header{padding:16px 20px;background:#111;border-bottom:2px solid #ff2d55;display:flex;justify-content:space-between;align-items:center}
@@ -25,7 +25,7 @@ textarea{width:100%;min-height:90px;background:#0f0f15;color:#fff;border:1px sol
 #status{background:#111;border:1px solid #333;padding:10px;border-radius:10px;margin-top:10px;font-size:13px;min-height:38px}
 label.chk{display:flex;gap:8px;align-items:center;background:#111;padding:8px;border-radius:8px;margin:6px 0;font-size:13px;cursor:pointer}
 </style></head><body>
-<header><div><b>CLIPPED<span>BY</span>SHOWDOWN</b><div class="small">CLIP IT. PROVE IT. POST IT. • Generic Director • AI Director • Non-destructive</div></div><div class="small">v1.0.1 • Fixed AI Director v12 - MY KILLS ONLY by Default (Teammate Kills Excluded) + Visual FX Panel (FX Must Be Requested) + REAL MP4 Export</div></header>
+<header><div><b>CLIPPED<span>BY</span>SHOWDOWN</b><div class="small">CLIP IT. PROVE IT. POST IT. • Generic Director • AI Director • Non-destructive</div></div><div class="small">v1.0.1 • FIXED My Kills Only v13 - Library + Editor + Import + Export All Working - Visual FX Panel (FX Must Be Requested) + REAL MP4 Export</div></header>
 <div class="wrap">
 <div>
 <div class="card" id="libCard"><h3>📁 Library — Import Multiple Clips</h3>
@@ -36,6 +36,7 @@ label.chk{display:flex;gap:8px;align-items:center;background:#111;padding:8px;bo
 <div id="library"></div></div>
 <div class="card"><h3>🤖 AI Director</h3>
 <label class="chk"><input type="checkbox" id="useAll" checked> Use All Clips in Library (AI Director)</label>
+<label class="chk"><input type="checkbox" id="myKillsOnly" checked> 🎯 MY KILLS ONLY — Only cuts kills YOU get (enemy in YOUR crosshair at first bullet). Teammate kills excluded.</label>
 <div class="card" id="fxCard"><h3>✨ Visual FX Panel — FX Must Be Requested</h3>
 <div class="small">Nothing here applies unless you tick it. AI Director will only use FX you request. Unticked = clean cut, no FX.</div>
 <label class="chk"><input type="checkbox" id="fxChromatic"> Chromatic Aberration — RGB split / red-blue fringe (viral edits)</label>
@@ -52,7 +53,7 @@ label.chk{display:flex;gap:8px;align-items:center;background:#111;padding:8px;bo
 <label class="chk"><input type="checkbox" id="pureCut" checked> ✂️ Pure Cut Mode — AI only cuts, never edits footage itself</label>
 <label class="chk"><input type="checkbox" id="adaptive" checked> 🎬 AI Adaptive Transitions — transition adapts to AI score / tempo</label>
 <textarea id="prompt">please make a really cool clip out of all the clips in my library that captures each of the kill moments i get please dont put music behind or text or visual effects on the clip but make it awesome with the other features please reference tiktok viral gaming tiktok videos for the transitions ideas and please make it 2 minutes and 8 seconds long</textarea>
-<div class="row"><button id="btnGen" onclick="generate()">✨ <label class="chk"><input type="checkbox" id="viralMode" checked> 🔥 Viral Mode — Match viral FPS edits (motion blur + chromatic aberration + shake + beat sync)</label>Generate Suggestion</button><button class="secondary" id="btnApply" onclick="applySuggestion()">Apply AI Suggestion</button></div>
+<label class="chk"><input type="checkbox" id="viralMode" checked> 🔥 Viral Mode — Match viral FPS edits (motion blur + chromatic aberration + shake + beat sync)</label><div class="row"><button id="btnGen" onclick="generate()">✨ Generate Suggestion</button><button class="secondary" id="btnApply" onclick="applySuggestion()">Apply AI Suggestion</button></div>
 <div id="suggestion"></div>
 <div id="status">Ready. Import clips, then ask AI Director.</div>
 <div class="progress"><i id="bar"></i></div></div>
@@ -210,15 +211,13 @@ async function detectKills(clip){
       if(inCross || nearCross){ firstContact=f.t; break; }
     }
     if(firstContact===null){
-      if($('allKills') && $('allKills').checked){ firstContact=Math.max(0,kt-1.2); }
+      if(!($('myKillsOnly') && $('myKillsOnly').checked)){ firstContact=Math.max(0,kt-1.2); }
       else { continue; }
     }
     // MY KILLS ONLY (default): killfeed must be within 2.0s of first bullet AND enemy was in crosshair at first bullet
     // Teammate kills fail this - their killfeed appears but you had no enemy in crosshair, so they get skipped
     const isMyKillCheck = frames.some(f=>Math.abs(f.t-firstContact)<0.35 && (f.crosshairEnemy||0)>0.01);
-    if(!isMyKillCheck && !($('allKills') && $('allKills').checked)){ continue; }
-      else { continue; }
-    }
+    if(!isMyKillCheck && ($('myKillsOnly') && $('myKillsOnly').checked)){ continue; } // MY KILLS ONLY: skip teammate kills
     // No fallback - if no enemy in crosshair, skip
     const start=Math.max(0, firstContact-0.4); // 0.4s lead-in so you see the aim
     const end=Math.min(clip.duration||20, kt+0.8); // 0.8s after killfeed so banner is visible
@@ -288,7 +287,16 @@ function renderTimeline(segs){
   $('timeline').innerHTML=segs.map((s,i)=>{ const ad=getAdaptive(s,segs); return `<div class="tl"><b>${i+1}</b> Clip ${s.clipIdx+1} • ${s.start.toFixed(1)}s • ${s.dur.toFixed(1)}s • Score ${s.score.toFixed(0)} • ${ad.type} • ${ad.duration}s • Tempo ${ad.tempo}</div>`; }).join('');
   $('timelineMeta').textContent=`Total ${segs.reduce((a,x)=>a+x.dur,0).toFixed(1)}s • Target 128s • ${segs.length} segments`;
 }
-function toolMsg(n){ $('toolMsg').textContent=n+' — applied to selected segment. Non-destructive. Originals untouched.'; }
+function toolMsg(n){
+  const el=$('toolMsg');
+  if(n==='Trim') el.innerHTML='✂️ <b>Trim:</b> Clips already trimmed to First Bullet → Enemy Death. Re-Generate for different length. Originals untouched.';
+  else if(n==='Transition') el.innerHTML='🎬 <b>Transition:</b> Tick Viral Mode + FX Panel (Chromatic / Shake / Flash / Blur / Zoom) then Play Timeline. No text on video.';
+  else if(n==='FX') el.innerHTML='✨ <b>FX:</b> Use Visual FX Panel above — tick only FX you want. Nothing applies unless ticked.';
+  else if(n==='Audio') el.innerHTML='🔇 <b>Audio:</b> Tick Remove Voice Comms to mute voice, keep game audio. No music added by default.';
+  else if(n==='Text') el.innerHTML='🔤 <b>Text:</b> No text on video by design — AI never adds titles / kill counters / transition names.';
+  else if(n==='Captions') el.innerHTML='💬 <b>Captions:</b> No captions on video by design (clean gameplay).';
+  else el.textContent=n+' — non-destructive. Originals untouched.';
+}
 function showTransition(ad, cb){
   const v=$('preview'); if(!v){ if(cb)cb(); return; }
   const fx = {
@@ -435,5 +443,18 @@ async function exportClip(){
     alert('Export failed: '+e.message);
   }
 }
+// --- FIXED WIRING: Import + Drag & Drop + Voice Removal + My Kills Only ---
+const filesEl = $('files');
+if(filesEl){ filesEl.addEventListener('change', e=>{ addFiles(e.target.files); e.target.value=''; }); }
+const libCard = $('libCard');
+if(libCard){
+  ['dragover','dragenter'].forEach(ev=> libCard.addEventListener(ev, e=>{ e.preventDefault(); libCard.style.border='2px dashed #ff2d55'; }));
+  ['dragleave','drop'].forEach(ev=> libCard.addEventListener(ev, e=>{ e.preventDefault(); libCard.style.border='1px solid #26262f'; }));
+  libCard.addEventListener('drop', e=>{ if(e.dataTransfer && e.dataTransfer.files) addFiles(e.dataTransfer.files); });
+}
+const vr = $('voiceRemoval'); if(vr){ vr.addEventListener('change', ()=>{ voiceRemovalOn = vr.checked; setStatus(voiceRemovalOn ? '🔇 Voice comms will be removed on Play + Export' : 'Voice comms kept'); }); voiceRemovalOn = vr.checked; }
+// Apply before Generate: if no suggestion yet, Generate first then Apply
+const _origApply = applySuggestion;
+applySuggestion = function(){ if(!suggestion){ setStatus('No suggestion yet — generating first, then applying...'); generate().then(()=>{ if(suggestion) _origApply(); }); return; } _origApply(); };
 renderLibrary();
 </script></body></html>
